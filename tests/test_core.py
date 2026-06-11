@@ -169,6 +169,35 @@ def test_all_items_fit():
     assert reconstruct_items(K, weights, capacity) == [0, 1, 2]
 
 
+def test_ties_values_agree_sets_may_differ():
+    """Нічиї: вартість методів збігається ЗАВЖДИ; набори можуть відрізнятися.
+
+    Перебір повертає перший знайдений оптимум (менші підмножини — раніше),
+    зворотний прохід ДП діє за правилом «нічия → не брати» — обидва набори
+    допустимі й рівноцінні. Саме цю домовленість документують README і
+    докстрінг ``knapsack_brute_force``.
+    """
+    wt, val, W = [1, 1, 2], [5, 5, 10], 2
+    bf_value, bf_combo = knapsack_brute_force(W, wt, val)
+    K = knapsack_dp_table(W, wt, val, 3)
+    chosen = reconstruct_items(K, wt, W)
+    assert bf_value == K[3][W] == 10
+    assert bf_combo == (2,) and chosen == [0, 1]      # різні, але рівноцінні
+    for combo in (bf_combo, chosen):
+        assert sum(wt[i] for i in combo) <= W
+        assert sum(val[i] for i in combo) == bf_value
+
+
+def test_greedy_steps_rejects_nonpositive_weight():
+    """Вага ≤ 0 → зрозумілий ValueError (ratio ділить на вагу), а не ZeroDivisionError."""
+    raised = False
+    try:
+        greedy_steps([(0, 5), (2, 3)], 4)
+    except ValueError as exc:
+        raised = "вага" in str(exc)
+    assert raised, "очікували ValueError про недодатну вагу"
+
+
 def test_tie_breaking_prefers_skip():
     """Конвенція нічиїх: take == skip → «не брати» (узгоджено в усіх шарах).
 

@@ -20,6 +20,8 @@ import matplotlib
 
 matplotlib.use("Agg")  # зберігаємо у файли без графічного дисплея
 
+import matplotlib.pyplot as plt  # noqa: E402  (після use("Agg") — навмисно)
+
 # корінь репозиторію в sys.path — дозволяє запуск без `pip install -e .`
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _ROOT not in sys.path:
@@ -74,8 +76,13 @@ class KnapsackExample:
 
 
 def save_figure(fig, name: str) -> None:
-    """Зберігає фігуру у :data:`IMG_DIR` під іменем ``name``."""
+    """Зберігає фігуру у :data:`IMG_DIR` під іменем ``name`` і **закриває** її.
+
+    Закриття тут — щоб приклади не накопичували відкриті Agg-полотна (по кілька
+    мегабайтів кожне): жоден скрипт після збереження фігуру не використовує.
+    """
     fig.savefig(os.path.join(IMG_DIR, name), bbox_inches="tight", dpi=FIGURE_DPI)
+    plt.close(fig)
 
 
 def save_anim(figures, basename: str, durations, **kwargs):

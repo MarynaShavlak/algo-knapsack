@@ -358,6 +358,54 @@ def test_dp_log_lines_format():
     assert "вміщується" in dp_cell_log_line(by_kind["skip"], _WT, _VAL)
 
 
+def test_instance_numbers_mirror_items():
+    """Копії чисел інстансів у тестах збігаються з examples/_items.py.
+
+    test_core навмисно не імпортує _items (щоб лишатися без matplotlib), тож
+    саме цей тест стереже, щоб дзеркальні копії не розійшлися з джерелом.
+    """
+    import _items
+    import test_core
+
+    for example, mirror in ((_items.CLASSIC, test_core.CLASSIC),
+                            (_items.SMALL, test_core.SMALL)):
+        assert mirror == {"weights": example.weights, "values": example.values,
+                          "capacity": example.capacity}
+    assert (_W, _WT, _VAL) == (_items.SMALL.capacity, _items.SMALL.weights,
+                               _items.SMALL.values)
+
+
+def test_set_lang_rejects_unknown_language():
+    """set_lang перевіряє аргумент явним винятком (assert зник би під -O)."""
+    for bad in ("UK", "Uk", "ua", "", "english"):
+        raised = False
+        try:
+            set_lang(bad)
+        except ValueError as exc:
+            raised = "set_lang" in str(exc)
+        assert raised, f"очікували ValueError для {bad!r}"
+    from knapsack.i18n import get_lang
+    assert get_lang() == "uk"      # невдалі спроби мову не змінюють
+
+
+def test_save_figure_closes_figure():
+    """save_figure зберігає і ЗАКРИВАЄ фігуру — приклади не накопичують полотен."""
+    import _common
+
+    plt.close("all")
+    orig = _common.IMG_DIR
+    with tempfile.TemporaryDirectory() as d:
+        _common.IMG_DIR = d
+        try:
+            fig, ax = plt.subplots(figsize=(2, 2))
+            ax.plot([0, 1], [0, 1])
+            _common.save_figure(fig, "probe.png")
+            assert os.path.exists(os.path.join(d, "probe.png"))
+            assert plt.get_fignums() == [], "фігура мала закритися після збереження"
+        finally:
+            _common.IMG_DIR = orig
+
+
 def test_english_labels_complete():
     """Аудит i18n (динамічний): ПОВНИЙ рендер у режимі en не лишає кирилиці.
 

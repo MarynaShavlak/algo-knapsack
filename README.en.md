@@ -619,7 +619,7 @@ for i in range(n, 0, -1):
 chosen.reverse()
 ```
 
-> In the lecture notes the table is called `dp` in this fragment — it is the same `K` (both names appear in the literature).
+> In the lecture notes the table is called `dp` in this fragment — it is the same `K` (both names appear in the literature). One more difference: the notebook fragment collects item **names** (`names[i - 1]`), while the package's [`reconstruct_items`](knapsack/core.py) returns **0-based indices** of the chosen items — the examples attach the names afterwards.
 
 The run on the small instance — three comparisons, three decisions:
 
@@ -748,6 +748,8 @@ Greedy method:               160  ← NOT optimal (loses 60)
 | Dynamic progr.   | 220    | $O(n \cdot W)$ | $O(n \cdot W)$ | ✅ yes   |
 
 **Conclusion:** brute force and DP both produce the correct 220, but DP does it far more efficiently. Greedy is the fastest, yet for the 0/1 problem it can be wrong.
+
+> **About ties.** When several optimal sets exist (different sets with the same maximum value), the exact methods may name different ones: brute force returns the first one found in enumeration order (smaller subsets first), while the DP backward pass assembles its set by the "tie → skip" rule. **The value always agrees** — and that is what the tests compare. On the classic instance the optimal set is unique, so there is no divergence here.
 
 ### The complexities in plain words
 

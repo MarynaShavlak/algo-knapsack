@@ -47,9 +47,16 @@ missing_translations: Set[str] = set()
 
 
 def set_lang(lang: str) -> None:
-    """Встановити мову підписів: ``"uk"`` (типово) або ``"en"``."""
+    """Встановити мову підписів: ``"uk"`` (типово) або ``"en"``.
+
+    :raises ValueError: для будь-якого іншого значення. Перевірка — явним
+        винятком, а не ``assert``: під ``python -O`` assert зникає, і тоді,
+        скажімо, ``set_lang("UK")`` мовчки поводився б як англійська
+        (:func:`t` особливо трактує лише точний рядок ``"uk"``).
+    """
     global LANG
-    assert lang in ("uk", "en"), lang
+    if lang not in ("uk", "en"):
+        raise ValueError(f"set_lang: підтримуються лише 'uk' та 'en', отримано {lang!r}.")
     LANG = lang
 
 

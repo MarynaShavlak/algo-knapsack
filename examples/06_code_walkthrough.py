@@ -20,8 +20,6 @@
 from _common import print_saved_location, save_anim, save_figure
 from _items import CLASSIC, SMALL
 
-import matplotlib.pyplot as plt  # noqa: E402
-
 from knapsack.i18n import t  # noqa: E402
 from knapsack.visualization import configure_style  # noqa: E402
 from knapsack.walkthrough import (  # noqa: E402
@@ -50,7 +48,6 @@ def main() -> None:
         steps, ex.weights, ex.values, ex.names,
         t("Код ↔ таблиця K: огляд по рядках (предмет за предметом)"))
     save_figure(fig, "code_steps_small.png")
-    plt.close(fig)
     print(t("  {name}: огляд, {n} кроків").format(name="code_steps_small", n=len(steps)))
 
     # 2) детально по клітинках — найпоказовіший рядок добираємо автоматично
@@ -61,7 +58,6 @@ def main() -> None:
         pick_illustrative(cells), ex.weights, ex.values, ex.names,
         t("Код ↔ таблиця K по клітинках (рядок i = {i})").format(i=focus))
     save_figure(grid, f"code_walk_small_i{focus}.png")
-    plt.close(grid)
 
     figures = [render_code_step(s, ex.weights, ex.values, ex.names) for s in cells]
     durations = [_DUR.get(s["kind"], 1200) for s in cells]
@@ -78,7 +74,6 @@ def main() -> None:
         t("Код ↔ таблиця K: огляд по рядках (класичний інстанс, стовпці кратні 10)"),
         cols=cols)
     save_figure(fig, "code_steps_classic.png")
-    plt.close(fig)
     print(t("  {name}: огляд, {n} кроків").format(name="code_steps_classic", n=len(steps)))
 
     print_saved_location()
