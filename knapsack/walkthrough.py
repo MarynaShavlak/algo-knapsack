@@ -99,12 +99,19 @@ def best_focus_row(W: int, wt: Sequence[int], val: Sequence[int], n: int) -> int
 
     Рахуємо, скільки РІЗНИХ гілок (``nofit`` / ``take`` / ``skip``) трапляється
     в кожному рядку; за рівності беремо нижчий рядок (пізніший предмет).
+
+    :raises ValueError: для виродженого інстансу (``n = 0`` або ``W = 0``) —
+        кожна клітинка там базова, тож «показового» рядка не існує.
     """
     _, _, steps = knapsack_dp_steps(W, wt, val, n)
     kinds_per_row: Dict[int, set] = {}
     for s in steps:
         if s["i"] >= 1 and s["kind"] != "base":
             kinds_per_row.setdefault(s["i"], set()).add(s["kind"])
+    if not kinds_per_row:
+        raise ValueError(
+            "best_focus_row: вироджений інстанс (немає предметів або W = 0) — "
+            "жодної клітинки з рішенням «взяти / не брати».")
     return max(kinds_per_row, key=lambda i: (len(kinds_per_row[i]), i))
 
 

@@ -35,7 +35,8 @@ import io
 import os
 import shutil
 import subprocess
-from typing import List, Optional, Sequence, Union
+import tempfile
+from typing import Iterable, List, Optional, Sequence, Union
 
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -73,6 +74,25 @@ def _render_frames(figures: Sequence["plt.Figure"], dpi: int) -> List[Image.Imag
     return [f if f.size == size else f.resize(size) for f in frames]
 
 
+def _normalize_durations(durations: Union[int, Iterable[int]], n_frames: int) -> List[int]:
+    """Зводить тривалості до списку «по одному значенню на кадр» (із перевіркою).
+
+    Нормалізація відбувається **рівно раз** на виклик ``save_gif``/``save_animation``:
+    далі GIF- і MP4-запис отримують той самий готовий список. Інакше одноразовий
+    ітератор вичерпався б першим записом, і MP4 мовчки лишився б без кадрів.
+
+    :raises ValueError: якщо кількість тривалостей не збігається з кількістю кадрів.
+    """
+    if isinstance(durations, int):
+        return [durations] * n_frames
+    durs = [int(d) for d in durations]
+    if len(durs) != n_frames:
+        raise ValueError(
+            f"кількість тривалостей ({len(durs)}) не збігається з кількістю "
+            f"кадрів ({n_frames}).")
+    return durs
+
+
 def _shared_palette(frames: Sequence[Image.Image], colors: int) -> Image.Image:
     """Будує спільну палітру з УСІХ кадрів.
 
@@ -96,19 +116,23 @@ def _shared_palette(frames: Sequence[Image.Image], colors: int) -> Image.Image:
 def _write_gif(
     frames: Sequence[Image.Image],
     path: str,
-    durations: Union[int, Sequence[int]],
+    durations: Sequence[int],
     *,
     colors: int = 128,
     loop: int = 0,
 ) -> None:
-    """Зшиває готові RGB-кадри у зациклений GIF зі спільною палітрою."""
+    """Зшиває готові RGB-кадри у зациклений GIF зі спільною палітрою.
+
+    ``durations`` — уже нормалізований список (:func:`_normalize_durations`),
+    по одному значенню на кадр.
+    """
     palette = _shared_palette(frames, colors)
     paletted = [f.quantize(palette=palette, dither=Image.Dither.NONE) for f in frames]
     paletted[0].save(
         path,
         save_all=True,
         append_images=paletted[1:],
-        duration=list(durations) if not isinstance(durations, int) else durations,
+        duration=list(durations),
         loop=loop,
         optimize=True,
         disposal=2,  # кожен кадр повністю замінює попередній (без «привидів»)
@@ -135,11 +159,14 @@ def save_gif(
     :param dpi: роздільність рендера (за замовчуванням нижча за статичні рисунки).
     :param colors: розмір спільної палітри GIF.
     :param loop: кількість повторів; ``0`` — нескінченний цикл.
+    :raises ValueError: якщо кадрів немає або кількість тривалостей не
+        збігається з кількістю кадрів.
     """
     if not figures:
         raise ValueError("save_gif: немає жодного кадру для анімації.")
+    durs = _normalize_durations(durations, len(figures))
     frames = _render_frames(figures, dpi)
-    _write_gif(frames, path, durations, colors=colors, loop=loop)
+    _write_gif(frames, path, durs, colors=colors, loop=loop)
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +200,7 @@ def _even(img: Image.Image, size: "tuple[int, int]") -> Image.Image:
 def _write_mp4(
     frames: Sequence[Image.Image],
     path: str,
-    durations: Union[int, Sequence[int]],
+    durations: Sequence[int],
     *,
     fps: int,
     crf: int,
@@ -185,10 +212,13 @@ def _write_mp4(
     працюємо на сталих ``fps`` і **повторюємо** кожен кадр стільки разів, скільки
     треба, щоб відтворити його тривалість (квант = ``1000 / fps`` мс). Так
     змінні затримки GIF точно переносяться у сталочастотний MP4.
+
+    ``durations`` — уже нормалізований список (по одному значенню на кадр).
+    stderr ffmpeg збираємо у тимчасовий файл (не в PIPE: на переповненому
+    пайпі ffmpeg заблокувався б, поки ми пишемо кадри в stdin) — щоб у разі
+    збою показати справжню причину, а не лише «Broken pipe».
     """
     quantum_ms = 1000.0 / fps
-    n = len(frames)
-    durs = list(durations) if not isinstance(durations, int) else [durations] * n
 
     w, h = frames[0].size
     even_size = (w + (w % 2), h + (h % 2))  # парні сторони для yuv420p
@@ -204,19 +234,32 @@ def _write_mp4(
         "-movflags", "+faststart",       # перемотка/стрімінг із першого байта
         path,
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    try:
-        for img, dur in zip(frames, durs):
-            data = _even(img, even_size).tobytes()
-            reps = max(1, int(round(dur / quantum_ms)))
-            for _ in range(reps):
-                proc.stdin.write(data)
-    finally:
-        if proc.stdin:
-            proc.stdin.close()
-        ret = proc.wait()
-    if ret != 0:
-        raise RuntimeError(f"ffmpeg exited with code {ret}")
+    with tempfile.TemporaryFile() as err:
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=err)
+        broken = False
+        try:
+            for img, dur in zip(frames, durations):
+                data = _even(img, even_size).tobytes()
+                reps = max(1, int(round(dur / quantum_ms)))
+                try:
+                    for _ in range(reps):
+                        proc.stdin.write(data)
+                except BrokenPipeError:
+                    broken = True        # ffmpeg помер — причина буде в stderr
+                    break
+        finally:
+            try:
+                proc.stdin.close()
+            except BrokenPipeError:
+                pass                     # труба вже мертва; головне — дочекатися
+            ret = proc.wait()            # …і обов'язково зібрати процес (без зомбі)
+        if ret != 0 or broken:
+            err.seek(0)
+            tail = err.read().decode("utf-8", errors="replace").strip()
+            cause = tail.splitlines()[-1] if tail else ""
+            msg = (f"ffmpeg завершився з кодом {ret}" if ret != 0
+                   else "ffmpeg закрив вхід, не прочитавши всі кадри")
+            raise RuntimeError(msg + (f": {cause}" if cause else ""))
 
 
 # ---------------------------------------------------------------------------
@@ -242,13 +285,18 @@ def save_animation(
     :param mp4_path: куди зберегти ``.mp4``; ``None`` — MP4 не потрібен.
     :param mp4_fps: стала частота кадрів MP4 (квант тривалості = ``1000/fps`` мс).
     :param mp4_crf: якість H.264 (менше = краще; 18 — майже без втрат для схем).
+    :raises ValueError: якщо кадрів немає або кількість тривалостей не
+        збігається з кількістю кадрів.
     :returns: шлях до записаного MP4 або ``None`` (MP4 не просили / ffmpeg немає /
         кодування не вдалося). GIF у будь-якому разі записано.
     """
     if not figures:
         raise ValueError("save_animation: немає жодного кадру для анімації.")
+    # тривалості нормалізуємо РАЗ — обидва записи отримують той самий список
+    # (одноразовий ітератор інакше вичерпався б GIF-ом, лишивши MP4 без кадрів)
+    durs = _normalize_durations(durations, len(figures))
     frames = _render_frames(figures, dpi)
-    _write_gif(frames, gif_path, durations, colors=colors, loop=loop)
+    _write_gif(frames, gif_path, durs, colors=colors, loop=loop)
 
     if mp4_path is None:
         return None
@@ -258,7 +306,7 @@ def save_animation(
         print(t("  ({name} пропущено — ffmpeg недоступний; pip install imageio-ffmpeg для відео)").format(name=name))
         return None
     try:
-        _write_mp4(frames, mp4_path, durations, fps=mp4_fps, crf=mp4_crf, ffmpeg=ffmpeg)
+        _write_mp4(frames, mp4_path, durs, fps=mp4_fps, crf=mp4_crf, ffmpeg=ffmpeg)
         return mp4_path
     except Exception as exc:  # noqa: BLE001 — MP4 best-effort: GIF уже є, не валимо збірку
         print(t("  ({name} пропущено: {err})").format(name=name, err=exc))

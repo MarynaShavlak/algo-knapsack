@@ -92,7 +92,8 @@ def _render_everything() -> None:
     plt.close(draw_dp_table_standalone(K, _WT, _VAL, names, answer=(_N, _W),
                                        note="t", take_cells={(1, 1)}))
     plt.close(draw_dp_table_standalone(K, _WT, _VAL, names, cols=[0, 2, 4]))
-    for i, w in ((1, 1), (3, 3), (3, 4), (2, 1)):   # взяти / не брати / не влазить
+    # взяти / не брати / не влазить / базові (w=0 та рядок i=0)
+    for i, w in ((1, 1), (3, 3), (3, 4), (2, 1), (1, 0), (0, 2)):
         plt.close(draw_dp_cell_frame(K, _WT, _VAL, names, i, w))
     plt.close(draw_dp_evolution(K, _WT, _VAL, names, "t"))
     plt.close(draw_backtrack(K, _WT, _VAL, names, recon, note="t"))
@@ -105,6 +106,7 @@ def _render_everything() -> None:
     buf = io.StringIO()
     with redirect_stdout(buf):
         print_dp_log(steps, _WT, _VAL, names)
+        print_dp_log(steps, _WT, _VAL, names, skip_base=False)
         print_dp_table(K, names, cols=[0, 2, 4])
         print_subsets(bf_steps, names, _W)
     for s in steps:
@@ -131,6 +133,89 @@ def _render_everything() -> None:
 def test_draw_functions_return_figures():
     """Кожна функція малювання відпрацьовує без винятків (повний прохід)."""
     _render_everything()
+
+
+def test_dp_cell_frame_base_cases():
+    """Базові клітинки (w=0 та рядок i=0) пояснюються базовим випадком.
+
+    Раніше кадр для ``w=0`` показував гілку «не вміщується», а для ``i=0``
+    мовчки індексував останній предмет (``names[-1]``) — обидва випадки тепер
+    мусять рендеритися як базові, без джерел «взяти/не брати».
+    """
+    _, K, steps = knapsack_dp_steps(_W, _WT, _VAL, _N)
+    names = item_names(_N)
+    # журнал підтверджує: це справді базові клітинки
+    kinds = {(s["i"], s["w"]): s["kind"] for s in steps}
+    assert kinds[(1, 0)] == "base" and kinds[(0, 2)] == "base"
+    for i, w in ((1, 0), (2, 0), (3, 0), (0, 0), (0, 2)):
+        fig = draw_dp_cell_frame(K, _WT, _VAL, names, i, w)
+        assert fig is not None
+        plt.close(fig)
+
+
+def test_dp_table_cols_must_cover_highlights():
+    """Зведені cols без підсвічуваної клітинки → зрозумілий ValueError.
+
+    Раніше це або падало KeyError (стрілки джерел), або мовчки губило
+    підсвічування — рисунок брехав би читачеві.
+    """
+    from knapsack.core import knapsack_dp_table, reconstruct_steps
+
+    K = knapsack_dp_table(_W, _WT, _VAL, _N)
+    names = item_names(_N)
+    # поточна клітинка поза показаними стовпцями
+    raised = False
+    try:
+        draw_dp_cell_frame(K, _WT, _VAL, names, 2, 3, cols=[0, 2, 4])
+    except ValueError as exc:
+        raised = "cols" in str(exc)
+    assert raised, "очікували ValueError про відсутній стовпець"
+    # шлях відновлення проходить стовпець, якого немає серед cols
+    _, recon = reconstruct_steps(K, _WT, _W)
+    raised = False
+    try:
+        draw_backtrack(K, _WT, _VAL, names, recon, cols=[0, 4])
+    except ValueError as exc:
+        raised = "cols" in str(exc)
+    assert raised, "очікували ValueError про шлях поза cols"
+
+
+def test_print_dp_log_base_row_header():
+    """skip_base=False: рядок i=0 підписується «базовий», а не останнім предметом."""
+    _, _, steps = knapsack_dp_steps(_W, _WT, _VAL, _N)
+    names = item_names(_N)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        print_dp_log(steps, _WT, _VAL, names, skip_base=False)
+    out = buf.getvalue()
+    assert "=== Рядок i=0  (базовий: без предметів) ===" in out
+    first_header = next(line for line in out.splitlines() if line.startswith("==="))
+    assert names[-1] not in first_header, "рядок i=0 не повинен згадувати останній предмет"
+
+
+def test_best_focus_row_degenerate_instances():
+    """Вироджені інстанси (W=0 або n=0) → зрозумілий ValueError, а не падіння max()."""
+    from knapsack.walkthrough import best_focus_row
+
+    for args in ((0, [1, 2], [3, 4], 2), (4, [], [], 0)):
+        raised = False
+        try:
+            best_focus_row(*args)
+        except ValueError as exc:
+            raised = "вироджений" in str(exc)
+        assert raised, f"очікували ValueError для {args}"
+
+
+def test_recursion_tree_tie_consistent_with_reconstruction():
+    """Дерево на «нічиїй» рендериться; конвенцію (нічия → «не брати») фіксує журнал."""
+    from knapsack.core import knapsack_dp_table, reconstruct_items
+
+    wt, val, W = [1, 1], [5, 5], 1
+    K = knapsack_dp_table(W, wt, val, 2)
+    assert reconstruct_items(K, wt, W) == [0]      # нічия → П2 не беремо
+    fig = draw_recursion_tree(W, wt, val, item_names(2))
+    assert fig is not None
+    plt.close(fig)
 
 
 def test_subsets_helpers():
@@ -175,6 +260,40 @@ def test_save_gif_rejects_empty():
         except ValueError:
             raised = True
         assert raised, "save_gif мав кинути ValueError на порожньому списку"
+
+
+def test_animation_durations_normalized_once():
+    """Тривалості нормалізуються раз: невідповідна кількість → ValueError,
+    а одноразовий ітератор обслуговує ОБИДВА формати (GIF і MP4)."""
+    from PIL import Image
+
+    def _frames(k=3):
+        out = []
+        for i in range(k):
+            fig, ax = plt.subplots(figsize=(2, 2))
+            ax.plot([0, 1], [0, i + 1])
+            out.append(fig)
+        return out
+
+    # замало тривалостей — зрозуміла помилка, а не «коротший» файл
+    with tempfile.TemporaryDirectory() as d:
+        raised = False
+        try:
+            save_gif(_frames(), os.path.join(d, "x.gif"), [200, 200])
+        except ValueError as exc:
+            raised = "тривалостей" in str(exc)
+        assert raised, "очікували ValueError про кількість тривалостей"
+
+    # одноразовий ітератор: раніше GIF його вичерпував і MP4 лишався без кадрів
+    with tempfile.TemporaryDirectory() as d:
+        gif = os.path.join(d, "anim.gif")
+        mp4 = os.path.join(d, "anim.mp4")
+        result = save_animation(_frames(), gif, iter([200, 200, 200]), mp4_path=mp4)
+        with Image.open(gif) as im:
+            assert im.n_frames == 3
+        if result is not None:
+            # порожній контейнер без відеокадрів важив ~261 байт
+            assert os.path.getsize(mp4) > 1000
 
 
 def test_save_animation_writes_gif_and_maybe_mp4():

@@ -329,12 +329,13 @@ def draw_recursion_tree(
 
     place(root, n - 1)
 
-    # оптимальний шлях: повторюємо вибір max(взяти, не брати) самого коду
+    # оптимальний шлях: суворе «>» — нічия означає «не брати», рівно як у
+    # зворотному проході (reconstruct_items: K[i][w] == K[i-1][w] → предмет ні)
     on_path = {id(root)}
     node = root
     while node["n"] > 1:
         take = node.get("take")
-        if take is not None and values[node["n"] - 1] + take["value"] >= node["skip"]["value"]:
+        if take is not None and values[node["n"] - 1] + take["value"] > node["skip"]["value"]:
             node = take
         else:
             node = node["skip"]
@@ -379,9 +380,10 @@ def draw_recursion_tree(
                 fontsize=9.5, color="#333333")
 
     def _took_branch(node: Dict) -> bool:
+        # те саме суворе «>», що й у проході on_path вище (нічия → «не брати»)
         take = node.get("take")
         return take is not None and (
-            values[node["n"] - 1] + take["value"] >= node["skip"]["value"])
+            values[node["n"] - 1] + take["value"] > node["skip"]["value"])
 
     width = max(8.0, counter[0] + leaf_step)
     fig, ax = plt.subplots(figsize=(width * 0.92, 1.9 * n + 0.8))
@@ -510,6 +512,9 @@ def draw_dp_table(
     :param answer: клітинка відповіді — червона рамка.
     :param compare: клітинка, з якою поточну порівнює зворотний прохід
         (``K[i-1][w]``) — синя рамка без заливки.
+    :raises ValueError: якщо стовпець підсвічуваної клітинки (поточної,
+        порівнюваної, відповіді чи джерела) не входить у ``cols`` — інакше
+        підсвічування мовчки зникло б із рисунка.
     """
     n = len(K) - 1
     all_cols = list(range(len(K[0])))
@@ -555,6 +560,17 @@ def draw_dp_table(
             if weights[ci - 1] <= cw:
                 take_src = (ci - 1, cw - weights[ci - 1])
 
+    # перевірка: усі підсвічувані клітинки мусять потрапляти в показані стовпці —
+    # інакше рисунок мовчки «загубить» рамку чи стрілку-джерело і збреше читачеві
+    highlighted = (("current", current), ("compare", compare), ("answer", answer),
+                   ("take_src", take_src), ("skip_src", skip_src))
+    missing = sorted({cell[1] for _, cell in highlighted
+                      if cell is not None and cell[1] not in col_x})
+    if missing:
+        raise ValueError(
+            f"draw_dp_table: стовпців {missing} немає серед cols={sorted(col_x)} — "
+            "підсвічені клітинки/джерела не потраплять на рисунок; розширте cols.")
+
     # клітинки
     for i in range(nrows):
         for w in cols:
@@ -588,16 +604,16 @@ def draw_dp_table(
                         fontweight="bold" if (i, w) in path or current == (i, w)
                         else "normal", zorder=4)
 
-    # рамки поверх заливок
-    if current is not None and current[1] in col_x:
+    # рамки поверх заливок (наявність стовпців перевірено вище)
+    if current is not None:
         ci, cw = current
         ax.add_patch(plt.Rectangle((col_x[cw], y_top(ci)), 1, 1, fill=False,
                                    edgecolor=CURRENT_EDGE, linewidth=2.6, zorder=5))
-    if compare is not None and compare[1] in col_x:
+    if compare is not None:
         bi, bw = compare
         ax.add_patch(plt.Rectangle((col_x[bw], y_top(bi)), 1, 1, fill=False,
                                    edgecolor=BLUE_EDGE, linewidth=2.4, zorder=5))
-    if answer is not None and answer[1] in col_x:
+    if answer is not None:
         ai, aw = answer
         ax.add_patch(plt.Rectangle((col_x[aw], y_top(ai)), 1, 1, fill=False,
                                    edgecolor=ANSWER_EDGE, linewidth=2.8, zorder=6))
@@ -606,12 +622,12 @@ def draw_dp_table(
     if show_sources and current is not None:
         ci, cw = current
         cur_c = (col_x[cw] + 0.5, y_top(ci) + 0.5)
-        if skip_src is not None and skip_src[1] in col_x:
+        if skip_src is not None:
             src_c = (col_x[skip_src[1]] + 0.5, y_top(skip_src[0]) + 0.5)
             ax.annotate("", xy=cur_c, xytext=src_c, zorder=7,
                         arrowprops=dict(arrowstyle="-|>", color=BLUE_EDGE, lw=2.2,
                                         shrinkA=14, shrinkB=14))
-        if take_src is not None and take_src[1] in col_x and take_src != skip_src:
+        if take_src is not None and take_src != skip_src:
             src_c = (col_x[take_src[1]] + 0.5, y_top(take_src[0]) + 0.5)
             ax.annotate("", xy=cur_c, xytext=src_c, zorder=7,
                         arrowprops=dict(arrowstyle="-|>", color=GREEN_EDGE, lw=2.2,
@@ -668,6 +684,8 @@ def draw_dp_cell_frame(
     Угорі — таблиця, заповнена до ``(i, w)``: поточна клітинка помаранчева,
     джерело «не брати» — синє (прямо над), джерело «взяти» — зелене (рядок вище,
     лівіше на вагу предмета). Унизу — формула: яка гілка спрацювала і чому.
+    Базові клітинки (``i == 0`` або ``w == 0``) пояснюються базовим випадком —
+    без джерел: гілки «взяти / не брати» до них не доходять.
 
     :returns: об'єкт ``Figure``.
     """
@@ -675,18 +693,27 @@ def draw_dp_cell_frame(
     all_cols = list(range(len(K[0])))
     cols = all_cols if cols is None else list(cols)
     ncols = len(cols)
+    base = (i == 0 or w == 0)
 
     fw, fh = _table_figsize(n + 1, ncols)
     fig, (ax, axf) = plt.subplots(
         2, 1, figsize=(max(fw, 8.6), fh + 2.35),
         gridspec_kw={"height_ratios": [fh, 2.1]})
     draw_dp_table(ax, K, weights, values, names, cols=cols, upto=(i, w),
-                  current=(i, w), show_sources=True)
+                  current=(i, w), show_sources=not base)
 
     axf.axis("off")
-    wi, vi = weights[i - 1], values[i - 1]
-    fits = wi <= w
-    if fits:
+    if base:
+        # базовий випадок: спрацьовує ПЕРША гілка коду, до «влазить/не влазить»
+        # справа не доходить — тож ні джерел, ні порівняння ваги в кадрі немає
+        reason = (t("→ предметів немає — і вартості немає") if i == 0
+                  else t("→ місця немає — нічого не покладеш"))
+        formula = (t("Базовий випадок: i = 0 або w = 0") + "\n"
+                   + reason + "\n\n"
+                   + f"K[{i}][{w}] = 0")
+        box = "#f5f5f5"
+    elif weights[i - 1] <= w:
+        wi, vi = weights[i - 1], values[i - 1]
         skip = K[i - 1][w]
         take = vi + K[i - 1][w - wi]
         took = take > skip
@@ -703,6 +730,7 @@ def draw_dp_cell_frame(
         )
         box = "#e8f5e9" if took else "#e3f2fd"
     else:
+        wi = weights[i - 1]
         formula = (
             t("Вага {name} = {wi}  >  w = {w}").format(name=names[i - 1], wi=wi, w=w)
             + "\n" + t("→ предмет НЕ вміщується")
@@ -714,17 +742,21 @@ def draw_dp_cell_frame(
              family="monospace", color=TEXT_FORMULA, transform=axf.transAxes,
              bbox=dict(boxstyle="round,pad=0.6", facecolor=box, edgecolor="#888"))
 
-    legend = (t("помаранчевий — поточна клітинка") + "\n"
-              + t("синій — джерело «не брати»") + "\n"
-              + t("зелений — джерело «взяти»"))
-    axf.text(0.99, 0.92, legend, ha="right", va="top", fontsize=8.5,
-             color="#444", transform=axf.transAxes,
-             bbox=dict(boxstyle="round,pad=0.4", facecolor="#fafafa", edgecolor="#ccc"))
+    if not base:
+        legend = (t("помаранчевий — поточна клітинка") + "\n"
+                  + t("синій — джерело «не брати»") + "\n"
+                  + t("зелений — джерело «взяти»"))
+        axf.text(0.99, 0.92, legend, ha="right", va="top", fontsize=8.5,
+                 color="#444", transform=axf.transAxes,
+                 bbox=dict(boxstyle="round,pad=0.4", facecolor="#fafafa", edgecolor="#ccc"))
 
-    fig.suptitle(title if title is not None
-                 else t("Заповнення клітинки K[{i}][{w}] (предмет {name}, місткість w={w})").format(
-                     i=i, w=w, name=names[i - 1]),
-                 fontsize=12.5, fontweight="bold")
+    if title is None:
+        if i == 0:
+            title = t("Заповнення клітинки K[0][{w}] — базовий рядок (без предметів)").format(w=w)
+        else:
+            title = t("Заповнення клітинки K[{i}][{w}] (предмет {name}, місткість w={w})").format(
+                i=i, w=w, name=names[i - 1])
+    fig.suptitle(title, fontsize=12.5, fontweight="bold")
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     return fig
 
@@ -796,6 +828,8 @@ def draw_backtrack(
     (хід ліворуч-угору на його вагу), сірі пунктирні — ні (хід прямо вгору).
 
     :param recon_steps: журнал :func:`knapsack.core.reconstruct_steps`.
+    :raises ValueError: якщо шлях відновлення проходить стовпці, яких немає
+        серед ``cols`` — інакше частина кроків мовчки зникла б із рисунка.
     :returns: об'єкт ``Figure``.
     """
     n = len(K) - 1
@@ -804,6 +838,13 @@ def draw_backtrack(
     cols = all_cols if cols is None else list(cols)
     col_x = {w: j for j, w in enumerate(cols)}
     nrows = n + 1
+
+    missing = sorted({w for s in recon_steps for w in (s["w"], s["w_after"])
+                      if w not in col_x})
+    if missing:
+        raise ValueError(
+            f"draw_backtrack: шлях відновлення проходить стовпці {missing}, "
+            f"яких немає серед cols={sorted(col_x)} — розширте cols.")
 
     fig, ax = plt.subplots(figsize=_table_figsize(nrows, len(cols)))
     draw_dp_table(ax, K, weights, values, names, title=title, cols=cols,
@@ -814,8 +855,6 @@ def draw_backtrack(
 
     for s in recon_steps:
         i, w, taken, w_after = s["i"], s["w"], s["taken"], s["w_after"]
-        if w not in col_x or w_after not in col_x:
-            continue
         src = center(i, w)
         dst = center(i - 1, w_after)
         color = GREEN_EDGE if taken else NEUTRAL_GRAY
@@ -980,8 +1019,12 @@ def print_dp_log(
             continue
         if i != current_row:
             current_row = i
-            print(t("\n=== Рядок i={i}  ({name}: вага={w}, вартість={v}) ===").format(
-                i=i, name=names[i - 1], w=weights[i - 1], v=values[i - 1]))
+            if i == 0:
+                # базовий рядок не має «свого» предмета — без імені/ваги
+                print(t("\n=== Рядок i=0  (базовий: без предметів) ==="))
+            else:
+                print(t("\n=== Рядок i={i}  ({name}: вага={w}, вартість={v}) ===").format(
+                    i=i, name=names[i - 1], w=weights[i - 1], v=values[i - 1]))
         if skip_base and s["kind"] == "base":
             print(t("K[{i}][{w}]: базовий випадок (w=0)  =>  0").format(i=i, w=s["w"]))
             continue

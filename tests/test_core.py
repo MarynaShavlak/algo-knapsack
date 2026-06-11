@@ -169,6 +169,19 @@ def test_all_items_fit():
     assert reconstruct_items(K, weights, capacity) == [0, 1, 2]
 
 
+def test_tie_breaking_prefers_skip():
+    """Конвенція нічиїх: take == skip → «не брати» (узгоджено в усіх шарах).
+
+    Журнал позначає таку клітинку kind="skip", зворотний прохід предмет не
+    бере — і саме цю конвенцію наслідує зелений шлях дерева рекурсії.
+    """
+    wt, val, W = [1, 1], [5, 5], 1
+    _, K, steps = knapsack_dp_steps(W, wt, val, 2)
+    cell = next(s for s in steps if (s["i"], s["w"]) == (2, 1))
+    assert cell["kind"] == "skip" and cell["take"] == cell["skip"] == 5
+    assert reconstruct_items(K, wt, W) == [0]
+
+
 def test_dp_steps_journal_consistency():
     """Журнал ДП: покриває всі клітинки, гілки відповідають числам у таблиці."""
     w, v, W = SMALL["weights"], SMALL["values"], SMALL["capacity"]

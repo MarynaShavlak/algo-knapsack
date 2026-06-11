@@ -84,11 +84,13 @@ def save_anim(figures, basename: str, durations, **kwargs):
     :param figures: список фігур-кадрів (будуть закриті під час рендера).
     :param basename: ім'я файлу БЕЗ розширення — ``.gif`` і ``.mp4`` додаються самі.
     :param durations: тривалість кадру(ів) у мс (число або послідовність).
+    :param kwargs: додаткові параметри :func:`knapsack.animation.save_animation`;
+        зокрема ``mp4_path=None`` вимикає MP4 (типово він кладеться поруч із GIF).
     :returns: шлях до MP4, якщо його записано, інакше ``None`` (GIF є завжди).
     """
     gif = os.path.join(IMG_DIR, basename + ".gif")
-    mp4 = os.path.join(IMG_DIR, basename + ".mp4")
-    return _save_animation(figures, gif, durations, mp4_path=mp4, **kwargs)
+    kwargs.setdefault("mp4_path", os.path.join(IMG_DIR, basename + ".mp4"))
+    return _save_animation(figures, gif, durations, **kwargs)
 
 
 def describe_instance(example: KnapsackExample) -> None:

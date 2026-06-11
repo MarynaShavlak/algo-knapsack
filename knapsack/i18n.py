@@ -130,6 +130,11 @@ _EN: Dict[str, str] = {
     "Після рядка i={i} (+{name})": "After row i={i} (+{name})",
 
     # --- visualization.draw_dp_cell_frame (формула переходу) -------------------
+    "Базовий випадок: i = 0 або w = 0": "The base case: i = 0 or w = 0",
+    "→ предметів немає — і вартості немає": "→ no items — hence no value",
+    "→ місця немає — нічого не покладеш": "→ no space — nothing can be packed",
+    "Заповнення клітинки K[0][{w}] — базовий рядок (без предметів)":
+        "Filling cell K[0][{w}] — the base row (no items)",
     "Вага {name} = {wi}  ≤  w = {w}   → вміщується":
         "Weight of {name} = {wi}  ≤  w = {w}   → it fits",
     "не брати : K[{i1}][{w}] = {skip}": "skip it : K[{i1}][{w}] = {skip}",
@@ -167,6 +172,8 @@ _EN: Dict[str, str] = {
         "K[{i}][{w}]: weight {wi} <= {w} -> fits -> max(skip={skip}, take {vi}+K[{i1}][{wleft}]={take})  =>  {val}",
     "\n=== Рядок i={i}  ({name}: вага={w}, вартість={v}) ===":
         "\n=== Row i={i}  ({name}: weight={w}, value={v}) ===",
+    "\n=== Рядок i=0  (базовий: без предметів) ===":
+        "\n=== Row i=0  (base: no items) ===",
     "K[{i}][{w}]: базовий випадок (w=0)  =>  0":
         "K[{i}][{w}]: base case (w=0)  =>  0",
     "{combo}  {w}  {v}  підсумок": "{combo}  {w}  {v}  verdict",
