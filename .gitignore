@@ -12,9 +12,6 @@ env/
 # pytest
 .pytest_cache/
 
-# Jupyter
-.ipynb_checkpoints/
-
 # matplotlib / OS
 *.tmp
 .DS_Store
