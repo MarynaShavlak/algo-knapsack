@@ -8,7 +8,7 @@
 
 It is a classic problem for meeting two strategies at once: **brute force** (honestly check all $2^n$ variants) and **dynamic programming** (solve every subproblem once and write it into a table). Both give the same exact answer, but at completely different costs — $O(2^n)$ versus $O(n \cdot W)$. As a bonus, the problem provides a textbook counterexample: the "obvious" greedy approach **does not work** here.
 
-This repository is teaching material: clean implementations from the lecture notes + detailed visualizations of every step. The entire walkthrough below is reproduced by the code in [`examples/`](examples), and the figures live in [`docs/images/en/`](docs/images/en). The original source is the lecture notebook [`knapSack.ipynb`](knapSack.ipynb) in the repository root.
+This repository is teaching material: clean implementations from the lecture notes + detailed visualizations of every step. The entire walkthrough below is reproduced by the code in [`examples/`](examples), and the figures live in [`docs/images/en/`](docs/images/en).
 
 > **About the notation.** Items are called **I1, I2, I3**. In the DP table, row `i` means "the first `i` items are allowed", so item I`i` "lives" in row `i`, while in the lists `wt`/`val` it has index `i − 1` (Python counts from zero). That is why the code says `wt[i - 1]` and `val[i - 1]` everywhere.
 

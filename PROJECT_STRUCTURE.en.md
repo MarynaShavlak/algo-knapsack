@@ -10,7 +10,6 @@ algo-knapsack/
 ├── README.en.md                       # the full English translation (points to docs/images/en/)
 ├── PROJECT_STRUCTURE.md               # this file — the repository layout
 ├── USAGE.md                           # installation, running the examples and tests
-├── knapSack.ipynb                     # the source notebook: the lecture notes this walkthrough grew from
 ├── pyproject.toml                     # package metadata (+ the [video] extra for MP4)
 ├── requirements.txt                   # dependencies (matplotlib, pillow)
 ├── LICENSE                            # MIT
@@ -54,4 +53,3 @@ algo-knapsack/
 - **`examples/_common.py`** removes duplication between the examples: `Agg`/path setup, `save_figure`, `save_anim`, the CLI language switch and the `KnapsackExample` dataclass that keeps weights, values and capacity together.
 - **`examples/_items.py`** — the source of truth for the three teaching instances (`CLASSIC`, `SMALL`, `BIG`); every example imports them, so within the examples the numbers are defined exactly once. The tests deliberately keep their own copies of these numbers (so that `test_core.py` stays free of heavy dependencies), and a smoke test guards that the copies match `_items.py`.
 - The **`examples/`** scripts merely pick an instance from `_items.py`, call the algorithm and the drawing functions, and save the figures.
-- **`knapSack.ipynb`** — the lecture-notes notebook the basic implementations and the teaching instances come from; it sits in the root as the primary source of this walkthrough.
